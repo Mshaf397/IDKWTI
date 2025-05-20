@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Web Synthesizer</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #fff;
+      font-family: sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #controls {
+      padding: 10px;
+      background: #222;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      max-height: 35vh;
+    }
+    input, textarea {
+      width: 100%;
+      font-size: 0.9em;
+      padding: 5px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 5px;
+    }
+    #synth-container {
+      flex: 1;
+      overflow: auto;
+    }
+    #synth {
+      display: grid;
+      grid-template-columns: repeat(14, 120px);
+      grid-auto-rows: 80px;
+      gap: 4px;
+      padding: 10px;
+    }
+    .key {
+      background: #444;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.85em;
+      text-align: center;
+      user-select: none;
+    }
+    .key:active {
+      background: #77f;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>Base Frequency (Hz) for Key 139:
+      <input id="baseFreq" type="number" value="440" step="0.01" />
+    </label>
+    <label>Custom Tuning (optional function or formula):</label>
+    <textarea id="tuningInput" rows="2" placeholder="Not used in this version but can be extended."></textarea>
+    <label>Custom Mapping (noteName:centValue, one per line):</label>
+    <textarea id="mappingInput" rows="8" placeholder="Example:
+C4:-700
+C#4:-600
+...
+A4:0
+...
+C6:1200"></textarea>
+    <button onclick="initSynth()">Apply</button>
+  </div>
+
+  <div id="synth-container">
+    <div id="synth"></div>
+  </div>
+
+  <script>
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const totalKeys = 280;
+    const keys = [];
+
+    function centsToFreq(baseFreq, cents) {
+      return baseFreq * Math.pow(2, cents / 1200);
+    }
+
+    function play(freq) {
+      const osc = context.createOscillator();
+      const gain = context.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.2;
+      osc.connect(gain).connect(context.destination);
+      osc.start();
+      osc.stop(context.currentTime + 1);
+    }
+
+    function parseMapping(text, baseFreq) {
+      const lines = text.trim().split('\n');
+      const result = [];
+
+      for (let i = 0; i < lines.length && i < totalKeys; i++) {
+        const parts = lines[i].split(':');
+        if (parts.length === 2) {
+          const name = parts[0].trim();
+          const cents = parseFloat(parts[1].trim());
+          const freq = centsToFreq(baseFreq, cents);
+          result.push({ name, cents, freq });
+        } else {
+          result.push({ name: `Key ${i}`, cents: (i - 139) * 100, freq: centsToFreq(baseFreq, (i - 139) * 100) });
+        }
+      }
+
+      // Fill remaining keys if mapping is too short
+      for (let i = result.length; i < totalKeys; i++) {
+        const cents = (i - 139) * 100;
+        result.push({ name: `Key ${i}`, cents, freq: centsToFreq(baseFreq, cents) });
+      }
+
+      return result;
+    }
+
+    function initSynth() {
+      const container = document.getElementById('synth');
+      container.innerHTML = '';
+
+      const baseFreq = parseFloat(document.getElementById('baseFreq').value);
+      const mapText = document.getElementById('mappingInput').value;
+      const mapping = parseMapping(mapText, baseFreq);
+
+      for (let i = 0; i < totalKeys; i++) {
+        const key = document.createElement('div');
+        key.className = 'key';
+
+        const { name, cents, freq } = mapping[i];
+        key.innerHTML = `<div>${name}</div><div>${freq.toFixed(2)} Hz</div><div>${cents.toFixed(2)}¢</div>`;
+        key.addEventListener('mousedown', () => play(freq));
+        key.addEventListener('touchstart', e => { e.preventDefault(); play(freq); }, { passive: false });
+
+        container.appendChild(key);
+      }
+    }
+
+    window.onload = initSynth;
+  </script>
+</body>
+</html>
